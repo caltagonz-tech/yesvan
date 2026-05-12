@@ -1,26 +1,81 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-grad-1: #f0e7ff;
+  --bg-grad-2: #ffe7f0;
+  --bg-grad-3: #e7f5ff;
+  --text-primary: #2a2438;
+  --text-secondary: #6b6480;
+  --text-tertiary: #9b95ad;
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 8px 32px rgba(80, 50, 130, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --urgent: #d97070;
+  --medium: #d9a955;
+  --low: #6fb88a;
+  --info: #7ba8d9;
+  --accent: #b89cff;
+  --bubble-bg: rgba(184, 238, 247, 0.55);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+[data-theme="dark"] {
+  --bg-grad-1: #1a1025;
+  --bg-grad-2: #25101a;
+  --bg-grad-3: #101825;
+  --text-primary: #e8e4f0;
+  --text-secondary: #a09ab5;
+  --text-tertiary: #6b6480;
+  --glass-bg: rgba(30, 25, 45, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --bubble-bg: rgba(40, 60, 80, 0.55);
+  --color-background: #121018;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+[data-theme="dark"] body {
+  background: var(--color-background);
+}
+
+[data-theme="dark"] .bg-white { background-color: rgba(30, 25, 45, 0.6) !important; }
+[data-theme="dark"] .bg-white\/80 { background-color: rgba(30, 25, 45, 0.8) !important; }
+[data-theme="dark"] .bg-white\/60 { background-color: rgba(30, 25, 45, 0.6) !important; }
+[data-theme="dark"] .bg-gray-100 { background-color: rgba(40, 35, 55, 0.6) !important; }
+[data-theme="dark"] .bg-gray-50 { background-color: rgba(35, 30, 50, 0.4) !important; }
+[data-theme="dark"] .border-gray-200 { border-color: rgba(255, 255, 255, 0.08) !important; }
+[data-theme="dark"] .border-gray-100 { border-color: rgba(255, 255, 255, 0.05) !important; }
+[data-theme="dark"] .border-gray-50 { border-color: rgba(255, 255, 255, 0.03) !important; }
+[data-theme="dark"] .hover\:bg-gray-100:hover { background-color: rgba(40, 35, 55, 0.6) !important; }
+[data-theme="dark"] .hover\:bg-gray-50:hover { background-color: rgba(35, 30, 50, 0.4) !important; }
+[data-theme="dark"] input, [data-theme="dark"] textarea, [data-theme="dark"] select {
+  background-color: rgba(30, 25, 45, 0.6) !important;
+  color: var(--text-primary) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
+@theme inline {
+  --color-background: #fafafa;
+  --color-foreground: var(--text-primary);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-urgent: var(--urgent);
+  --color-medium: var(--medium);
+  --color-low: var(--low);
+  --color-info: var(--info);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-work-sans);
+  --font-heading: var(--font-manrope);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
 }
