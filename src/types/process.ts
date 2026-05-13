@@ -7,6 +7,23 @@
 
 export type StepType = "check" | "action" | "email" | "decision";
 
+// ── Step Fields (data capture per step) ──
+
+export type StepFieldType = "text" | "select" | "date" | "entity_picker" | "boolean" | "number" | "email" | "phone" | "textarea";
+
+export type StepField = {
+  key: string;                // "host_family_id", "flight_number"
+  label: string;              // "Host family", "Flight number"
+  type: StepFieldType;
+  required: boolean;
+  target_table?: string;      // "students" — which table to write back to
+  target_column?: string;     // "homestay_family_id" — which column
+  entity_type?: string;       // For entity_picker — which entity table to search
+  options?: string[];         // For select type — dropdown options
+  prefill_from?: string;      // "student.preferred_city" — auto-fill from existing data
+  placeholder?: string;       // Input placeholder text
+};
+
 export type LinkedDataConfig = {
   entity_type: "student" | "host" | "driver" | "university" | "transport" | "payment" | "homestay";
   relationship: "assigned" | "related" | "created_by_step";
@@ -48,6 +65,9 @@ export type StepDefinition = {
   typically_responsible?: string;
   notes?: string;
   recurring?: boolean;
+
+  // Data capture fields for this step (mini-form)
+  fields?: StepField[];
 
   // Linked data shown with this step
   linked_data?: LinkedDataConfig[];
@@ -110,6 +130,7 @@ export type ProcessStepData = {
   emails: StepEmail[];
   decision_value: string | null;
   decision_metadata: Record<string, unknown> | null;
+  field_values: Record<string, unknown>;  // Step field data captured by user or AI
   notes: string | null;
   created_by: string;
   updated_by: string | null;
@@ -141,11 +162,16 @@ export type StudentProcessState = {
 
 // ── Utility: resolve which steps are visible given state ──
 
+/**
+ * entityData: optional record data for evaluating entity-based conditions.
+ * Keys are "entity.field" paths like "student.is_minor", "student.program".
+ */
 export function resolveVisibleSteps(
   steps: StepDefinition[],
   activeBranches: string[],
   skippedSteps: number[],
   stepData: ProcessStepData[],
+  entityData?: Record<string, unknown>,
 ): StepDefinition[] {
   const branchSet = new Set(activeBranches);
   const skipSet = new Set(skippedSteps);
@@ -175,13 +201,49 @@ export function resolveVisibleSteps(
           const decVal = decisions.get(decStep);
           return evaluateCondition(decVal, cond.operator, cond.value);
         }
-        // For now, other field types pass through (would need student data)
+        // Entity-based conditions: "student.is_minor", "student.program", etc.
+        if (entityData && cond.field.includes(".")) {
+          const val = entityData[cond.field];
+          return evaluateCondition(val, cond.operator, cond.value);
+        }
         return true;
       });
     }
 
     return true;
   });
+}
+
+/**
+ * Render an email template by substituting {{entity.field}} placeholders
+ * with actual values from the provided entity data map.
+ */
+export function renderTemplate(template: string, entityData: Record<string, unknown>): string {
+  return template.replace(/\{\{(\w+)\.(\w+)\}\}/g, (match, entity, field) => {
+    const key = `${entity}.${field}`;
+    const val = entityData[key];
+    return val !== null && val !== undefined ? String(val) : match;
+  });
+}
+
+/**
+ * Pre-fill step fields from entity data based on prefill_from config.
+ * Returns a map of field key → prefilled value.
+ */
+export function prefillFields(
+  fields: StepField[],
+  entityData: Record<string, unknown>,
+): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const f of fields) {
+    if (f.prefill_from) {
+      const val = entityData[f.prefill_from];
+      if (val !== null && val !== undefined) {
+        values[f.key] = val;
+      }
+    }
+  }
+  return values;
 }
 
 function evaluateCondition(actual: unknown, operator: string, expected: unknown): boolean {
