@@ -9,6 +9,8 @@ type ActionCardProps = {
   context: string;
   attribution?: string;
   timeLabel?: string;
+  stepLabel?: string;
+  index?: number;
   actions: { label: string; variant: "primary" | "secondary" | "tertiary"; onClick: () => void; completes?: boolean }[];
   onComplete?: () => void;
   onTap?: () => void;
@@ -27,6 +29,8 @@ export default function ActionCard({
   context,
   attribution,
   timeLabel,
+  stepLabel,
+  index = 0,
   actions,
   onComplete,
   onTap,
@@ -91,6 +95,8 @@ export default function ActionCard({
         border: "1px solid var(--glass-border)",
         boxShadow: "var(--glass-shadow)",
         transition: "transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s, max-height 0.4s",
+        animation: completing ? undefined : `cardEnter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both`,
+        animationDelay: completing ? undefined : `${index * 80}ms`,
       }}
     >
       {/* Tappable area: header + context */}
@@ -99,22 +105,29 @@ export default function ActionCard({
         onClick={onTap}
       >
         {/* Header */}
-        <div className="flex items-center gap-2.5 mb-2">
-          <div
-            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-            style={{
-              background: urgencyColors[urgency],
-              boxShadow: `0 0 12px ${urgencyColors[urgency]}`,
-            }}
-          />
-          <h2 className="font-heading font-semibold text-base text-text-primary flex-1">{title}</h2>
-          {timeLabel && (
-            <span className="text-[11px] text-text-tertiary whitespace-nowrap flex-shrink-0">{timeLabel}</span>
-          )}
+        <div className="flex items-start gap-2 mb-1">
+          <h2 className="font-heading font-semibold text-base text-text-primary flex-1 leading-snug">{title}</h2>
           {onTap && (
-            <span className="material-symbols-outlined text-text-tertiary text-[18px]">chevron_right</span>
+            <span className="material-symbols-outlined text-text-tertiary text-[18px] flex-shrink-0 mt-0.5">chevron_right</span>
           )}
         </div>
+
+        {/* Sub-header: time + step label */}
+        {(timeLabel || stepLabel) && (
+          <div className="flex items-center gap-2 mb-2">
+            {timeLabel && (
+              <span className="text-[11px] text-text-tertiary">{timeLabel}</span>
+            )}
+            {stepLabel && (
+              <span
+                className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                style={{ background: "rgba(184,156,255,0.15)", color: "var(--accent)" }}
+              >
+                {stepLabel}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Context */}
         <p

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useFeedbackMode } from "@/components/desktop/FeedbackModeContext";
 
 /* ── AI Prompt types ── */
 interface PromptTemplate {
@@ -36,6 +37,7 @@ const NOTIFICATION_EVENTS = [
 
 export default function SettingsPage() {
   const supabase = createClient();
+  const { feedbackMode, toggleFeedbackMode } = useFeedbackMode();
   const [notifChannel, setNotifChannel] = useState("push");
   const [telegramChatId, setTelegramChatId] = useState("");
   const [whatsappPhone, setWhatsappPhone] = useState("");
@@ -463,6 +465,41 @@ export default function SettingsPage() {
               })}
             </div>
           )}
+        </section>
+
+        {/* Feedback mode */}
+        <section>
+          <h2 className="font-heading font-semibold text-sm text-text-secondary uppercase tracking-wide mb-3">Feedback</h2>
+          <div className="rounded-2xl border border-gray-200 bg-white p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-text-primary">Annotation mode</p>
+                <p className="text-xs text-text-tertiary mt-0.5">
+                  {feedbackMode
+                    ? "Active — click any element on any page to leave a comment."
+                    : "Click any element to pin a comment. Pins are saved and visible next session."}
+                </p>
+              </div>
+              <button
+                onClick={toggleFeedbackMode}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                  feedbackMode ? "bg-accent" : "bg-gray-200"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition duration-200 ${
+                    feedbackMode ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+            {feedbackMode && (
+              <div className="mt-3 flex items-center gap-2 text-xs text-accent font-medium">
+                <span className="material-symbols-outlined text-[14px]">mode_comment</span>
+                Annotation mode is on — hover to highlight, click to comment
+              </div>
+            )}
+          </div>
         </section>
 
         {/* App info */}

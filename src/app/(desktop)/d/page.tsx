@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { timeAgo } from "@/lib/timeago";
 
@@ -19,6 +19,35 @@ type RecentCard = {
   status: string;
   created_at: string;
 };
+
+type UpcomingHomestay = {
+  id: string;
+  arrival_date: string;
+  departure_date: string | null;
+  status: string | null;
+  students: { display_id: string; first_name: string; last_name: string } | null;
+  host_families: { family_name: string } | null;
+};
+
+type UpcomingTransport = {
+  id: string;
+  type: string | null;
+  datetime: string | null;
+  flight_number: string | null;
+  status: string | null;
+  students: { display_id: string; first_name: string } | null;
+};
+
+const BAR_COLORS = [
+  { bg: "bg-violet-300", border: "border-violet-400", text: "text-violet-900" },
+  { bg: "bg-sky-300", border: "border-sky-400", text: "text-sky-900" },
+  { bg: "bg-emerald-300", border: "border-emerald-400", text: "text-emerald-900" },
+  { bg: "bg-amber-300", border: "border-amber-400", text: "text-amber-900" },
+  { bg: "bg-rose-300", border: "border-rose-400", text: "text-rose-900" },
+  { bg: "bg-teal-300", border: "border-teal-400", text: "text-teal-900" },
+  { bg: "bg-indigo-300", border: "border-indigo-400", text: "text-indigo-900" },
+  { bg: "bg-orange-300", border: "border-orange-400", text: "text-orange-900" },
+];
 
 const PROCESS_LABELS: Record<string, string> = {
   academic_placement: "Academic Placement",
@@ -51,6 +80,8 @@ export default function DashboardPage() {
   const [recentCards, setRecentCards] = useState<RecentCard[]>([]);
   const [processStats, setProcessStats] = useState<{ total: number; completed: number }>({ total: 0, completed: 0 });
   const [blockedStudents, setBlockedStudents] = useState<{ id: string; displayId: string; name: string; processName: string; blockedOn: string; step: string }[]>([]);
+  const [upcomingHomestays, setUpcomingHomestays] = useState<UpcomingHomestay[]>([]);
+  const [upcomingTransports, setUpcomingTransports] = useState<UpcomingTransport[]>([]);
   const [loading, setLoading] = useState(true);
 
   const supabase = createClient();
@@ -110,6 +141,29 @@ export default function DashboardPage() {
       })));
     }
 
+    // Upcoming events — next 14 days
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const endDate = new Date(Date.now() + 14 * 86400000);
+    const endStr = endDate.toISOString().slice(0, 10);
+
+    const [upHomestayRes, upTransportRes] = await Promise.all([
+      supabase
+        .from("homestays")
+        .select("id, arrival_date, departure_date, status, students(display_id, first_name, last_name), host_families(family_name)")
+        .lte("arrival_date", endStr)
+        .or(`departure_date.gte.${todayStr},departure_date.is.null`)
+        .neq("status", "cancelled"),
+      supabase
+        .from("transports")
+        .select("id, type, datetime, flight_number, status, students(display_id, first_name)")
+        .gte("datetime", `${todayStr}T00:00:00`)
+        .lte("datetime", `${endStr}T23:59:59`)
+        .neq("status", "cancelled"),
+    ]);
+
+    if (upHomestayRes.data) setUpcomingHomestays(upHomestayRes.data as unknown as UpcomingHomestay[]);
+    if (upTransportRes.data) setUpcomingTransports(upTransportRes.data as unknown as UpcomingTransport[]);
+
     setLoading(false);
   }, [supabase, currentQuarter]);
 
@@ -135,6 +189,61 @@ export default function DashboardPage() {
     low: "bg-blue-400",
     info: "bg-gray-400",
   };
+
+  const DAYS = 14;
+  const timelineDays = useMemo(() => {
+    const days: Date[] = [];
+    for (let i = 0; i < DAYS; i++) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() + i);
+      days.push(d);
+    }
+    return days;
+  }, []);
+
+  const todayMidnight = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
+  const windowEnd = useMemo(() => { const d = new Date(todayMidnight); d.setDate(d.getDate() + DAYS - 1); return d; }, [todayMidnight]);
+
+  const timelineRows = useMemo(() => {
+    return upcomingHomestays
+      .filter((h) => {
+        // Only show homestay rows where arrival OR departure falls within the 14-day window
+        const arrival = new Date(h.arrival_date + "T00:00:00");
+        const departure = h.departure_date ? new Date(h.departure_date + "T00:00:00") : null;
+        const arrivalInWindow = arrival >= todayMidnight && arrival <= windowEnd;
+        const departureInWindow = departure !== null && departure >= todayMidnight && departure <= windowEnd;
+        return arrivalInWindow || departureInWindow;
+      })
+      .map((h, i) => {
+        const arrival = new Date(h.arrival_date + "T00:00:00");
+        const departure = h.departure_date ? new Date(h.departure_date + "T00:00:00") : windowEnd;
+        const clampedStart = arrival < todayMidnight ? todayMidnight : arrival;
+        const clampedEnd = departure > windowEnd ? windowEnd : departure;
+        const startCol = Math.round((clampedStart.getTime() - todayMidnight.getTime()) / 86400000);
+        const spanCols = Math.max(Math.round((clampedEnd.getTime() - clampedStart.getTime()) / 86400000) + 1, 1);
+        const studentId = h.students?.display_id || "";
+        const rowTransports = upcomingTransports
+          .filter((t) => {
+            if (!t.datetime || t.students?.display_id !== studentId) return false;
+            const td = new Date(t.datetime);
+            const day = Math.round((new Date(td.getFullYear(), td.getMonth(), td.getDate()).getTime() - todayMidnight.getTime()) / 86400000);
+            return day >= 0 && day < DAYS;
+          })
+          .map((t) => {
+            const td = new Date(t.datetime!);
+            const col = Math.round((new Date(td.getFullYear(), td.getMonth(), td.getDate()).getTime() - todayMidnight.getTime()) / 86400000);
+            return { col, transport: t };
+          });
+        return { h, i, startCol, spanCols, rowTransports };
+      });
+  }, [upcomingHomestays, upcomingTransports, todayMidnight, windowEnd]);
+
+  // transports not linked to any homestay row that has a start/end in the window
+  const orphanTransports = useMemo(() => {
+    const linkedIds = new Set(timelineRows.map(({ h }) => h.students?.display_id));
+    return upcomingTransports.filter((t) => !linkedIds.has(t.students?.display_id || ""));
+  }, [timelineRows, upcomingTransports]);
 
   if (loading) {
     return (
@@ -375,6 +484,178 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Upcoming events timeline */}
+      <div className="mt-8">
+        <h2 className="font-heading font-semibold text-sm text-text-primary mb-3 flex items-center gap-2">
+          <span className="material-symbols-outlined text-[16px] text-text-secondary">calendar_month</span>
+          Upcoming — next 14 days
+        </h2>
+
+        {timelineRows.length === 0 && orphanTransports.length === 0 ? (
+          <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center">
+            <span className="material-symbols-outlined text-[32px] text-text-tertiary">event_available</span>
+            <p className="text-sm text-text-tertiary mt-2">No homestays or transports in the next 14 days.</p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+            <div className="flex">
+              {/* Left label column */}
+              <div className="flex-shrink-0 border-r border-gray-200 bg-gray-50/50 z-10 min-w-[140px]">
+                <div className="h-[44px] border-b border-gray-200 px-3 flex items-center">
+                  <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wide">Student</span>
+                </div>
+                {timelineRows.map(({ h, i }) => (
+                  <div key={h.id} className="h-[40px] border-b border-gray-100 px-3 flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-sm flex-shrink-0 ${BAR_COLORS[i % BAR_COLORS.length].bg}`} />
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold text-text-primary leading-tight truncate">
+                        {h.students?.display_id} {h.students?.first_name}
+                      </p>
+                      <p className="text-[9px] text-text-tertiary leading-tight truncate">
+                        {h.host_families?.family_name || "No host"}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {orphanTransports.map((t) => (
+                  <div key={t.id} className="h-[40px] border-b border-gray-100 px-3 flex items-center gap-2">
+                    <span className={`material-symbols-outlined text-[12px] ${t.type === "arrival" ? "text-green-600" : "text-red-500"}`}>
+                      {t.type === "arrival" ? "flight_land" : "flight_takeoff"}
+                    </span>
+                    <p className="text-[11px] font-semibold text-text-primary truncate">
+                      {t.students?.display_id} {t.students?.first_name}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Scrollable grid */}
+              <div className="flex-1 overflow-x-auto">
+                {(() => {
+                  const COL = 38;
+                  const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+                  return (
+                    <div style={{ minWidth: DAYS * COL }}>
+                      {/* Day headers */}
+                      <div className="flex border-b border-gray-200">
+                        {timelineDays.map((d, i) => {
+                          const isToday = i === 0;
+                          const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                          return (
+                            <div
+                              key={i}
+                              className={`flex-shrink-0 text-center border-r border-gray-100 py-1 ${isToday ? "bg-accent/10" : isWeekend ? "bg-gray-50/60" : ""}`}
+                              style={{ width: COL }}
+                            >
+                              <div className="text-[9px] text-text-tertiary font-medium">{WEEKDAYS[d.getDay()]}</div>
+                              <div className={`text-[11px] font-medium ${isToday ? "w-5 h-5 rounded-full bg-accent text-white flex items-center justify-center mx-auto" : "text-text-secondary"}`}>
+                                {d.getDate()}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Homestay rows */}
+                      {timelineRows.map(({ h, i, startCol, spanCols, rowTransports }) => {
+                        const colors = BAR_COLORS[i % BAR_COLORS.length];
+                        return (
+                          <div key={h.id} className="relative h-[40px] border-b border-gray-100">
+                            {/* Column backgrounds */}
+                            <div className="absolute inset-0 flex pointer-events-none">
+                              {timelineDays.map((d, ci) => (
+                                <div
+                                  key={ci}
+                                  className={`flex-shrink-0 border-r border-gray-50 ${ci === 0 ? "bg-accent/5" : d.getDay() === 0 || d.getDay() === 6 ? "bg-gray-50/30" : ""}`}
+                                  style={{ width: COL }}
+                                />
+                              ))}
+                            </div>
+                            {/* Today line */}
+                            <div className="absolute top-0 bottom-0 w-px bg-accent/30 z-10 pointer-events-none" style={{ left: COL / 2 }} />
+                            {/* Homestay bar */}
+                            <div
+                              className={`absolute top-1.5 h-6 rounded-md border ${colors.bg} ${colors.border} ${colors.text} flex items-center px-1.5 text-[9px] font-semibold z-20 cursor-default`}
+                              style={{ left: startCol * COL + 2, width: spanCols * COL - 4 }}
+                              title={`${h.students?.display_id} @ ${h.host_families?.family_name || "TBD"} · ${h.arrival_date} → ${h.departure_date || "ongoing"}`}
+                            >
+                              <span className="truncate">{h.host_families?.family_name || "TBD"}</span>
+                              <span className={`ml-auto text-[8px] opacity-60 flex-shrink-0 px-1 py-0.5 rounded ${h.status === "active" ? "bg-white/40" : "bg-white/20"}`}>
+                                {h.status}
+                              </span>
+                            </div>
+                            {/* Transport icons */}
+                            {rowTransports.map(({ col, transport }) => (
+                              <div
+                                key={transport.id}
+                                className="absolute z-30 pointer-events-none"
+                                style={{ left: col * COL + COL / 2 - 7, top: transport.type === "arrival" ? 0 : 26 }}
+                                title={`${transport.type === "arrival" ? "Arrival" : "Departure"} · ${transport.flight_number || ""} · ${transport.datetime ? new Date(transport.datetime).toLocaleTimeString("en-CA", { hour: "2-digit", minute: "2-digit" }) : ""}`}
+                              >
+                                <span className={`material-symbols-outlined text-[13px] ${transport.type === "arrival" ? "text-green-600" : "text-red-500"}`}>
+                                  {transport.type === "arrival" ? "flight_land" : "flight_takeoff"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+
+                      {/* Orphan transports (no homestay) */}
+                      {orphanTransports.map((t) => {
+                        if (!t.datetime) return null;
+                        const td = new Date(t.datetime);
+                        const col = Math.round((new Date(td.getFullYear(), td.getMonth(), td.getDate()).getTime() - todayMidnight.getTime()) / 86400000);
+                        if (col < 0 || col >= DAYS) return null;
+                        return (
+                          <div key={t.id} className="relative h-[40px] border-b border-gray-100">
+                            <div className="absolute inset-0 flex pointer-events-none">
+                              {timelineDays.map((d, ci) => (
+                                <div key={ci} className={`flex-shrink-0 border-r border-gray-50 ${ci === 0 ? "bg-accent/5" : d.getDay() === 0 || d.getDay() === 6 ? "bg-gray-50/30" : ""}`} style={{ width: COL }} />
+                              ))}
+                            </div>
+                            <div className="absolute top-0 bottom-0 w-px bg-accent/30 z-10 pointer-events-none" style={{ left: COL / 2 }} />
+                            <div
+                              className="absolute z-30 flex items-center gap-1"
+                              style={{ left: col * COL + 2, top: 10 }}
+                              title={`${t.type === "arrival" ? "Arrival" : "Departure"} · ${t.flight_number || ""} · ${t.datetime ? new Date(t.datetime).toLocaleTimeString("en-CA", { hour: "2-digit", minute: "2-digit" }) : ""}`}
+                            >
+                              <span className={`material-symbols-outlined text-[13px] ${t.type === "arrival" ? "text-green-600" : "text-red-500"}`}>
+                                {t.type === "arrival" ? "flight_land" : "flight_takeoff"}
+                              </span>
+                              <span className="text-[9px] text-text-secondary font-medium">{t.flight_number || ""}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Legend */}
+            <div className="border-t border-gray-200 px-4 py-2 flex items-center gap-4 bg-gray-50/30">
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[13px] text-green-600">flight_land</span>
+                <span className="text-[10px] text-text-tertiary">Arrival</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[13px] text-red-500">flight_takeoff</span>
+                <span className="text-[10px] text-text-tertiary">Departure</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-px h-3 bg-accent/40" />
+                <span className="text-[10px] text-text-tertiary">Today</span>
+              </div>
+              <span className="ml-auto text-[10px] text-text-tertiary">
+                {timelineRows.length} homestay{timelineRows.length !== 1 ? "s" : ""} · {upcomingTransports.length} transport{upcomingTransports.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import FeedbackOverlay from "@/components/desktop/FeedbackOverlay";
+import { FeedbackModeProvider } from "@/components/desktop/FeedbackModeContext";
 
 const navItems = [
   { href: "/m", icon: "home", label: "Home" },
@@ -9,7 +11,7 @@ const navItems = [
   { href: "/m/settings", icon: "settings", label: "Settings" },
 ];
 
-export default function MobileLayout({ children }: { children: React.ReactNode }) {
+function MobileShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
@@ -61,6 +63,17 @@ export default function MobileLayout({ children }: { children: React.ReactNode }
           <span className="material-symbols-outlined text-[26px] font-semibold">add</span>
         </Link>
       </nav>
+
+      {/* Feedback overlay — button sits above the bottom nav (nav is ~80px from bottom) */}
+      <FeedbackOverlay bottomOffset={100} />
     </div>
+  );
+}
+
+export default function MobileLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <FeedbackModeProvider>
+      <MobileShell>{children}</MobileShell>
+    </FeedbackModeProvider>
   );
 }

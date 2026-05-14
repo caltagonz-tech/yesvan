@@ -22,6 +22,7 @@ type CardData = {
   draft_email_to?: string | null;
   assigned_to?: string | null;
   process_name?: string | null;
+  linked_step_order?: number | null;
 };
 
 type TeamMember = { id: string; name: string };
@@ -152,7 +153,19 @@ export default function MobileHomePage() {
     setLoading(false);
   }, [supabase]);
 
+  // Initial load — show cards immediately
   useEffect(() => { fetchCards(); }, [fetchCards]);
+
+  // Sync process cards in the background after initial render.
+  // Any new/updated cards land via the realtime subscription — no visible flash.
+  useEffect(() => {
+    fetch("/api/process-assist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "sync_process_cards" }),
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch team members for hand off
   useEffect(() => {
@@ -166,16 +179,24 @@ export default function MobileHomePage() {
     });
   }, [supabase]);
 
+  // Re-fetch greeting once cards are loaded so it can reference them
   useEffect(() => {
+    if (loading) return;
     fetch("/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "greeting" }),
+      body: JSON.stringify({
+        action: "greeting",
+        data: {
+          cards: cards.slice(0, 3).map(c => ({ title: c.title, urgency: c.urgency, category: c.category })),
+        },
+      }),
     })
       .then((r) => r.json())
       .then((d) => { if (d.greeting) setAiGreeting(d.greeting); })
       .catch(() => {});
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   // Realtime subscription for cards
   useEffect(() => {
@@ -403,7 +424,7 @@ export default function MobileHomePage() {
     });
 
     actions.push({
-      label: "Hand off",
+      label: "Hand off to someone else",
       variant: "tertiary",
       onClick: () => setShowHandoff(showHandoff === card.id ? null : card.id),
     });
@@ -417,7 +438,7 @@ export default function MobileHomePage() {
     // Energy-aware: offer "Make it smaller" for non-email cards
     if (card.category !== "email") {
       actions.push({
-        label: breakingDown === card.id ? "Thinking..." : "Make it smaller",
+        label: breakingDown === card.id ? "Thinking..." : "Create small tasks",
         variant: "tertiary",
         onClick: () => handleMakeSmaller(card),
       });
@@ -464,15 +485,22 @@ export default function MobileHomePage() {
         </div>
       )}
 
-      {/* Energy chip selector — AI picks 3 tasks matched to your energy */}
-      {!allClear && (
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-[11px] text-text-tertiary font-medium">Energy:</span>
+      {/* Energy chip selector — only mount once cards are prioritised so the
+          entrance animation fires in the same render cycle as the cards */}
+      {!allClear && prioritizedIds !== null && (
+        <div
+          className="flex items-center gap-2 mb-4"
+          style={{
+            animation: "cardEnter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both",
+            animationDelay: "0ms",
+          }}
+        >
+          <span className="text-[11px] text-text-tertiary font-medium">Your energy level now:</span>
           {(["low", "medium", "high"] as const).map((level) => (
             <button
               key={level}
               onClick={() => setEnergy(level)}
-              className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-all ${
+              className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full transition-all ${
                 energy === level
                   ? level === "low"
                     ? "bg-amber-100 text-amber-700 border border-amber-200"
@@ -482,7 +510,10 @@ export default function MobileHomePage() {
                   : "bg-white/40 text-text-tertiary border border-transparent"
               }`}
             >
-              {level === "low" ? "🪫 Low" : level === "medium" ? "⚡ Medium" : "🔥 High"}
+              <span style={{ fontSize: "1.5em", lineHeight: 1, display: "flex" }}>
+                {level === "low" ? "🪫" : level === "medium" ? "⚡" : "🔥"}
+              </span>
+              {level === "low" ? "Low" : level === "medium" ? "Medium" : "High"}
             </button>
           ))}
           {prioritizing && (
@@ -495,19 +526,30 @@ export default function MobileHomePage() {
         <AllClearState />
       ) : (
         <>
-          {visibleCards.map((card) => (
+          {visibleCards.map((card, cardIndex) => (
             <div key={card.id}>
-              <ActionCard
-                id={card.id}
-                urgency={card.urgency}
-                title={card.title}
-                context={card.context || ""}
-                attribution={card.attribution}
-                timeLabel={card.created_at ? timeAgo(card.created_at) : undefined}
-                onComplete={() => handleComplete(card.id)}
-                actions={getCardActions(card)}
-                onTap={() => router.push(`/m/card/${card.id}`)}
-              />
+              {(() => {
+                // If context is a bare "Step N of M" string (set by syncProcessCard),
+                // promote it to the chip and don't repeat it in the card body.
+                const stepMatch = card.context?.match(/^Step (\d+) of (\d+)$/);
+                const stepLabel = stepMatch ? card.context! : card.linked_step_order != null ? `Step ${card.linked_step_order}` : undefined;
+                const bodyContext = stepMatch ? "" : (card.context || "");
+                return (
+                  <ActionCard
+                    id={card.id}
+                    urgency={card.urgency}
+                    title={card.title}
+                    context={bodyContext}
+                    attribution={card.attribution}
+                    timeLabel={card.created_at ? timeAgo(card.created_at) : undefined}
+                    stepLabel={stepLabel}
+                    index={cardIndex}
+                    onComplete={() => handleComplete(card.id)}
+                    actions={getCardActions(card)}
+                    onTap={() => router.push(`/m/card/${card.id}`)}
+                  />
+                );
+              })()}
               {showSnooze === card.id && (
                 <div className="flex gap-2 mb-4 -mt-2 ml-4">
                   {SNOOZE_OPTIONS.map((opt) => (
@@ -567,11 +609,6 @@ export default function MobileHomePage() {
               )}
             </div>
           ))}
-          {moreCount > 0 && (
-            <p className="text-center text-xs text-text-tertiary font-medium mt-1">
-              + {moreCount} more for later
-            </p>
-          )}
         </>
       )}
 

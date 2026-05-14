@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { ColumnDef } from "@/lib/supabase/types";
 
@@ -12,6 +12,7 @@ type DataSheetProps = {
   hasArchived?: boolean;
   onRowAction?: (rowId: string) => void;
   rowActionLabel?: string;
+  renderExpandedRow?: (row: Record<string, unknown>) => React.ReactNode;
 };
 
 type CellHistoryEntry = {
@@ -25,7 +26,7 @@ type CellHistoryEntry = {
   user_name?: string;
 };
 
-export default function DataSheet({ tableName, columns, title, hasArchived = true, onRowAction, rowActionLabel }: DataSheetProps) {
+export default function DataSheet({ tableName, columns, title, hasArchived = true, onRowAction, rowActionLabel, renderExpandedRow }: DataSheetProps) {
   const [data, setData] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -43,6 +44,8 @@ export default function DataSheet({ tableName, columns, title, hasArchived = tru
   const [cellHistory, setCellHistory] = useState<{ rowId: string; colKey: string; entries: CellHistoryEntry[] } | null>(null);
   const [cellHistoryLoading, setCellHistoryLoading] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
+
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
   // Column filters
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
@@ -470,6 +473,7 @@ export default function DataSheet({ tableName, columns, title, hasArchived = tru
                     className="rounded"
                   />
                 </th>
+                {renderExpandedRow && <th className="w-6 px-1" />}
                 {activeColumns.map((col) => (
                   <th
                     key={col.key}
@@ -503,8 +507,10 @@ export default function DataSheet({ tableName, columns, title, hasArchived = tru
                   const rowId = row.id as string;
                   const lastEditor = getLastEditor(row);
                   const updatedAt = row.updated_at as string | null;
+                  const isExpanded = expandedRowId === rowId;
                   return (
-                    <tr key={rowId} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors group">
+                    <React.Fragment key={rowId}>
+                    <tr className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors group ${isExpanded ? "bg-gray-50/60" : ""}`}>
                       <td className="px-3 py-2">
                         <input
                           type="checkbox"
@@ -518,6 +524,19 @@ export default function DataSheet({ tableName, columns, title, hasArchived = tru
                           className="rounded"
                         />
                       </td>
+                      {renderExpandedRow && (
+                        <td className="px-1 py-2 w-6">
+                          <button
+                            onClick={() => setExpandedRowId(isExpanded ? null : rowId)}
+                            className="flex items-center justify-center text-text-tertiary hover:text-text-primary transition-colors"
+                            title={isExpanded ? "Collapse" : "Expand"}
+                          >
+                            <span className={`material-symbols-outlined text-[16px] transition-transform duration-150 ${isExpanded ? "rotate-180" : ""}`}>
+                              expand_more
+                            </span>
+                          </button>
+                        </td>
+                      )}
                       {activeColumns.map((col) => {
                         const isEditing = editingCell?.rowId === rowId && editingCell?.colKey === col.key;
                         const cellEditable = col.editable !== false;
@@ -627,6 +646,14 @@ export default function DataSheet({ tableName, columns, title, hasArchived = tru
                         </td>
                       )}
                     </tr>
+                    {renderExpandedRow && isExpanded && (
+                      <tr className="border-b border-gray-100 bg-gray-50/40">
+                        <td colSpan={activeColumns.length + 2 + (onRowAction ? 1 : 0)}>
+                          {renderExpandedRow(row)}
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })
               )}

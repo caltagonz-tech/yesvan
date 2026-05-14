@@ -1,4 +1,7 @@
+"use client";
+
 import DataSheet from "@/components/desktop/DataSheet";
+import { StudentExpansion } from "@/components/desktop/RelatedDataExpansion";
 import type { ColumnDef } from "@/lib/supabase/types";
 
 const columns: ColumnDef[] = [
@@ -32,5 +35,12 @@ const columns: ColumnDef[] = [
 ];
 
 export default function StudentsPage() {
-  return <DataSheet tableName="students" columns={columns} title="Students" />;
+  return (
+    <DataSheet
+      tableName="students"
+      columns={columns}
+      title="Students"
+      renderExpandedRow={(row) => <StudentExpansion row={row} />}
+    />
+  );
 }

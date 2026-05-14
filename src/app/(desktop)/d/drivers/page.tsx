@@ -1,4 +1,7 @@
+"use client";
+
 import DataSheet from "@/components/desktop/DataSheet";
+import { DriverExpansion } from "@/components/desktop/RelatedDataExpansion";
 import type { ColumnDef } from "@/lib/supabase/types";
 
 const columns: ColumnDef[] = [
@@ -15,5 +18,12 @@ const columns: ColumnDef[] = [
 ];
 
 export default function DriversPage() {
-  return <DataSheet tableName="drivers" columns={columns} title="Drivers" />;
+  return (
+    <DataSheet
+      tableName="drivers"
+      columns={columns}
+      title="Drivers"
+      renderExpandedRow={(row) => <DriverExpansion row={row} />}
+    />
+  );
 }

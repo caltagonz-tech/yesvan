@@ -15,6 +15,7 @@ const navItems = [
   { href: "/d/email", label: "Email", icon: "mail" },
   { href: "/d/calendar", label: "Calendar", icon: "calendar_month" },
   { href: "/d/checklists", label: "Checklists", icon: "checklist" },
+  { href: "/d/captures", label: "Captures", icon: "inbox" },
   { href: "/d/processes", label: "Processes", icon: "account_tree" },
   { href: "/d/settings", label: "Settings", icon: "settings" },
 ];

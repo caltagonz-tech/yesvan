@@ -3,6 +3,7 @@
 import { useState } from "react";
 import DataSheet from "@/components/desktop/DataSheet";
 import HostPaymentDetail from "@/components/desktop/HostPaymentDetail";
+import { HostExpansion } from "@/components/desktop/RelatedDataExpansion";
 import type { ColumnDef } from "@/lib/supabase/types";
 
 const columns: ColumnDef[] = [
@@ -35,6 +36,7 @@ export default function HostsPage() {
         title="Host Families"
         onRowAction={(rowId) => setSelectedHostId(rowId)}
         rowActionLabel="Payments"
+        renderExpandedRow={(row) => <HostExpansion row={row} />}
       />
       {selectedHostId && (
         <HostPaymentDetail hostId={selectedHostId} onClose={() => setSelectedHostId(null)} />
